@@ -1,0 +1,87 @@
+# 思源 Android 二开定制说明（连接自托管服务器）
+
+本仓库 fork 自 `siyuan-note/siyuan-android`，定制目标：**让 App 连接自己的思源服务器（飞牛 NAS），而不是在手机上启动本地内核**。
+
+## 设计原则（为方便定期合并 upstream）
+
+改动分为两类：
+
+1. **新增文件（零冲突）**
+   - `app/src/main/java/org/b3log/siyuan/RemoteConfig.java` —— 所有配置集中在这里（地址、端口、授权码、总开关）
+   - `app/src/main/java/org/b3log/siyuan/RemoteKernel.java` —— 所有远程逻辑（登录鉴权、等待服务就绪）
+   - 这两个文件是新增的，官方 upstream 完全没有它们，合并时不会产生冲突。
+
+2. **对官方文件的修改（带标记，便于识别）**
+   - `MainActivity.java`：地址常量指向 RemoteConfig；`bootKernel()` 和 `waitFotKernelHttpServing()` 开头各有一个 `SYNUIAN-CUSTOM-BEGIN/END` 包裹的开关块，官方原逻辑完整保留在后面。
+   - `JSAndroid.java`、`Utils.java`：6 处 `127.0.0.1:6806` 字符串换成 `RemoteConfig.ORIGIN`（单行替换，极少冲突）。
+
+**总开关**：`RemoteConfig.ENABLED`
+- `true`（当前）= 连接远程服务器
+- `false` = 回退到官方本地内核逻辑（用于对比测试 / 排查问题）
+
+## 定期合并官方最新代码的流程
+
+```powershell
+# 1. 确认 upstream  remote 存在（首次）
+git remote -v   # 应看到 upstream = https://github.com/siyuan-note/siyuan-android.git
+
+# 2. 拉取官方最新代码
+git fetch upstream
+
+# 3. 变基到官方最新（把我们的定制 commit 重新应用到最新代码之上）
+git rebase upstream/main
+
+# 4. 如果 rebase 报冲突：
+#    - 冲突几乎只会发生在 MainActivity.java 的 SYNUIAN-CUSTOM 标记块附近
+#    - 解决原则：保留 SYNUIAN-CUSTOM-BEGIN/END 之间的开关块，其余采用官方(incoming)代码
+#    - 然后 git add <文件> && git rebase --continue
+
+# 5. 校验所有定制点都还在（见下方校验脚本）
+.\scripts\verify-custom.ps1
+
+# 6. 重新构建（见下）
+.\scripts\rebuild.ps1
+
+# 7. 推送到自己的 fork
+git push origin main
+```
+
+## 重新构建 APK
+
+构建产物（`kernel.aar`、`app.zip`、签名文件）不入库，升级版本后需要按版本重新生成：
+
+1. **`app.zip`（前端资源）**：从对应版本的官方 APK 提取，或从运行中的服务器 Docker 容器复制：
+   ```
+   docker cp siyuan:/opt/siyuan/appearance  <临时目录>/appearance
+   docker cp siyuan:/opt/siyuan/stage       <临时目录>/stage
+   docker cp siyuan:/opt/siyuan/guide       <临时目录>/guide
+   docker cp siyuan:/opt/siyuan/changelogs  <临时目录>/changelogs
+   # 打包这几个目录为 app.zip，放到 app/src/main/assets/app.zip
+   ```
+
+2. **`kernel.aar`（Go 内核）**：从 siyuan 主仓库对应 tag 用 gomobile 编译。版本必须与前端资源一致：
+   ```powershell
+   # 克隆对应版本主仓库（如 v3.8.11）
+   git clone --depth 1 --branch v3.8.11 https://github.com/siyuan-note/siyuan.git siyuan-kernel-src
+   cd siyuan-kernel-src/kernel
+   $env:ANDROID_HOME="..."; $env:ANDROID_NDK_HOME="..."; $env:JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8"
+   gomobile bind -tags "fts5,sqlcipher" -ldflags "-s -w" -o <本仓库>/app/libs/kernel.aar -target android/arm64 -androidapi=26 ./mobile/
+   ```
+   注意 Windows 上必须设 `JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8"`，否则 gomobile 生成的中文 Javadoc 会让 javac 报 GBK 编码错误。
+
+3. **编译 APK**：
+   ```powershell
+   .\gradlew assembleOfficialDebug --no-daemon
+   # 产物：app/build/outputs/apk/official/debug/
+   ```
+   首次构建需 `signings.gradle`（从 `signings.templates.gradle` 复制）、`local.properties`（指向 Android SDK）、SDK platform 36 + NDK + build-tools 36。
+
+## 修改服务器地址
+
+只改 `RemoteConfig.java` 三个常量：`HOST`、`PORT`、`AUTH_CODE`，然后重新构建即可。
+
+## 重要提醒
+
+- `AUTH_CODE`（访问授权码）明文写在 APK 里，仅限个人使用。
+- debug 版包名是 `org.b3log.siyuan.debug`，可与官方版共存。
+- 服务器升级内核版本后，建议同步更新 app.zip 和 kernel.aar 到相同版本，避免前后端 API 不匹配。

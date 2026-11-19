@@ -26,6 +26,8 @@ package org.b3log.siyuan;
  * 其它改造点都用 git 记录，方便 rebase。</p>
  */
 public final class RemoteConfig {
+    /** 总开关：true=连接远程服务器；false=使用官方本地内核逻辑 */
+    public static final boolean ENABLED = true;
     /** 远程服务器协议 */
     public static final String SCHEME = "http";
     /** 远程服务器主机（飞牛 NAS 的局域网 IP） */

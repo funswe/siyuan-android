@@ -1068,55 +1068,51 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     };
 
     private void bootKernel() {
-        // ===== 二开定制：不启动本地内核，连接远程服务器 =====
-        // 原逻辑会在手机上调用 Mobile.startKernel 启动本地 Go 内核；
-        // 现在改为异步完成：1) 登录远程服务器拿到鉴权 cookie 2) 探测服务就绪 3) 加载页面。
-        new Thread(() -> {
-            // 1) 远程鉴权：loginAuth 拿到 Set-Cookie 并注入 WebView CookieManager
-            authenticateRemoteServer();
-            // 2) 等待远程服务就绪
-            waitFotKernelHttpServing();
-            // 3) 回到主线程加载页面
-            runOnUiThread(this::bootIndex);
-        }, "RemoteBoot").start();
-    }
-
-    /**
-     * 二开定制：向远程思源服务器登录，拿到 siyuan 鉴权 cookie 并注入 WebView。
-     * 3.8.x 服务端在未登录时访问主页会返回 401，必须先登录拿 cookie。
-     */
-    private void authenticateRemoteServer() {
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) new URL(RemoteConfig.LOGIN_URL).openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
-            conn.setRequestProperty("Content-Type", "application/json");
-            final String body = "{\"authCode\":\"" + RemoteConfig.AUTH_CODE + "\"}";
-            final java.io.OutputStream os = conn.getOutputStream();
-            os.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            os.flush();
-            os.close();
-
-            final int code = conn.getResponseCode();
-            final String setCookie = conn.getHeaderField("Set-Cookie");
-            Log.i("remote-auth", "login code=" + code + " cookie=" + (null == setCookie ? "null" : setCookie.split(";")[0]));
-            if (code == 200 && null != setCookie && !setCookie.isEmpty()) {
-                final String cookie = setCookie.split(";")[0]; // siyuan=xxxxx
-                final CookieManager cm = CookieManager.getInstance();
-                cm.setCookie(RemoteConfig.ORIGIN, cookie);
-                cm.flush();
-                Log.i("remote-auth", "auth cookie injected");
-            }
-        } catch (final Exception e) {
-            Utils.logError("remote-auth", "authenticate remote server failed", e);
-        } finally {
-            if (null != conn) {
-                conn.disconnect();
-            }
+        // ===== SYNUIAN-CUSTOM-BEGIN (remote kernel hook) =====
+        // 二开定制：不启动本地内核，改为连接远程服务器。
+        // 合并 upstream 后若本段冲突，保留本 if 块即可；官方原逻辑在 else 中完整保留。
+        if (RemoteConfig.ENABLED) {
+            new Thread(() -> {
+                RemoteKernel.authenticate();
+                RemoteKernel.waitForServer();
+                runOnUiThread(this::bootIndex);
+            }, "RemoteBoot").start();
+            return;
         }
+        // ===== SYNUIAN-CUSTOM-END =====
+
+        if (Mobile.isHttpServing()) {
+            Log.i("kernel", "Kernel HTTP server is running");
+            bootIndex();
+            return;
+        }
+
+        try {
+            new Thread(() -> {
+                final String channel = Utils.getChannel(this.getPackageManager());
+                if ("cn".equals(channel) || "huawei".equals(channel)) {
+                    Mobile.disableFeature("ai");
+                }
+
+                final String appDir = getFilesDir().getAbsolutePath() + "/app";
+                final String workspaceBaseDir = getExternalFilesDir(null).getAbsolutePath();
+                final String timezone = TimeZone.getDefault().getID();
+                final String localIPs = Utils.getLANIPAddressList(this);
+                final String langCode = Utils.getLanguage();
+                Mobile.startKernel("android", appDir, workspaceBaseDir, timezone, localIPs, langCode,
+                        Build.VERSION.RELEASE +
+                                "/SDK " + Build.VERSION.SDK_INT +
+                                "/WebView " + webViewVer +
+                                "/Manufacturer " + android.os.Build.MANUFACTURER +
+                                "/Brand " + android.os.Build.BRAND +
+                                "/UA " + userAgent);
+            }).start();
+        } catch (final Exception e) {
+            Utils.logError("kernel", "boot kernel failed", e);
+            return;
+        }
+
+        bootIndex();
     }
 
     private WebResourceResponse handleRequest(String urlString, Map<String, String> headers) {
@@ -1186,33 +1182,21 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     }
 
     /**
-     * 二开定制：等待远程内核 HTTP 服务就绪（探测 bootProgress 接口）。
+     * 等待内核 HTTP 服务伺服。
      */
     private void waitFotKernelHttpServing() {
-        HttpURLConnection conn = null;
-        for (int i = 0; i < 300; i++) { // 最多约 30 秒
-            try {
-                conn = (HttpURLConnection) new URL(RemoteConfig.BOOT_PROGRESS_URL).openConnection();
-                conn.setRequestMethod("POST");
-                conn.setConnectTimeout(3000);
-                conn.setReadTimeout(3000);
-                final int code = conn.getResponseCode();
-                if (code == 200) {
-                    Log.i("remote", "remote server is ready");
-                    conn.disconnect();
-                    return;
-                }
-            } catch (final Exception ignored) {
-                // 服务器还没就绪，继续重试
-            } finally {
-                if (null != conn) {
-                    conn.disconnect();
-                    conn = null;
-                }
-            }
-            sleep(100);
+        // ===== SYNUIAN-CUSTOM-BEGIN (remote readiness hook) =====
+        if (RemoteConfig.ENABLED) {
+            RemoteKernel.waitForServer();
+            return;
         }
-        Log.i("remote", "remote server not ready after timeout, continue anyway");
+        // ===== SYNUIAN-CUSTOM-END =====
+        while (true) {
+            sleep(10);
+            if (Mobile.isHttpServing()) {
+                break;
+            }
+        }
     }
 
     private void initAppearance() {
