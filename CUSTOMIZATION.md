@@ -65,9 +65,12 @@ git push origin main
    git clone --depth 1 --branch v3.8.11 https://github.com/siyuan-note/siyuan.git siyuan-kernel-src
    cd siyuan-kernel-src/kernel
    $env:ANDROID_HOME="..."; $env:ANDROID_NDK_HOME="..."; $env:JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8"
+   $env:CGO_LDFLAGS="-Wl,-z,max-page-size=16384"   # 关键：16KB 页对齐，消除系统警告
    gomobile bind -tags "fts5,sqlcipher" -ldflags "-s -w" -o <本仓库>/app/libs/kernel.aar -target android/arm64 -androidapi=26 ./mobile/
    ```
-   注意 Windows 上必须设 `JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8"`，否则 gomobile 生成的中文 Javadoc 会让 javac 报 GBK 编码错误。
+   注意：
+   - Windows 上必须设 `JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8"`，否则 gomobile 生成的中文 Javadoc 会让 javac 报 GBK 编码错误。
+   - 必须设 `CGO_LDFLAGS="-Wl,-z,max-page-size=16384"`，否则 libgojni.so 是 4KB 对齐，会触发 Android 16KB 警告。
 
 3. **编译 APK**：
    ```powershell
@@ -82,7 +85,11 @@ git push origin main
 
 ## 已解决的问题（供参考）
 
-1. **小米 16KB 对齐警告弹窗**：debug 构建的 `debuggable=true` 会让 HyperOS 对未 16KB 对齐的 so 弹兼容性警告。已在 `app/build.gradle` 的 debug 块设 `debuggable=false` 消除（不影响功能，包名仍带 .debug 可与官方版共存）。
+1. **小米 16KB 对齐警告弹窗（已从根源修复）**：
+   - `libgojni.so`：gomobile 编译内核时通过环境变量 `CGO_LDFLAGS="-Wl,-z,max-page-size=16384"` 让 ELF LOAD 段按 16KB 对齐（0x4000）。重新编译命令见下方"重新构建"第 2 步，**务必带上这个环境变量**。
+   - `libonnxruntime.so` / `libonnxruntime4j_jni.so`：来自 `onnxruntime-android` 依赖且未对齐。已在 `app/build.gradle` 注释掉该依赖（连远程时本地 OCR 用不到，OCR 在服务端处理）。
+   - 修复后恢复官方默认 `debuggable=true`，不再需要绕过。
+   - 校验方法：`llvm-readelf -l libgojni.so | grep LOAD`，对齐应为 `0x4000`。
 2. **启动黑屏 ANR**：`showBootIndex()` 运行在主线程，早期版本在其中做远程网络等待导致主线程阻塞。修复：`waitFotKernelHttpServing()` 的远程分支直接返回（服务已在 bootKernel 的 RemoteBoot 后台线程确认就绪）。
 
 ## 重要提醒

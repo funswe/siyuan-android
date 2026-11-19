@@ -53,10 +53,6 @@ android {
         debug {
             applicationIdSuffix = ".debug"
 
-            // SYNUIAN-CUSTOM: 关闭 debuggable，避免小米 HyperOS 对可调试应用弹出
-            // 16KB 页对齐兼容性警告（本地编译的 so 未做 16KB 对齐）。功能不受影响。
-            debuggable = false
-
             minifyEnabled = false
 
             resValue "string", "app_name", "SiYuan-Debug"
@@ -108,7 +104,9 @@ androidComponents {
 }
 
 dependencies {
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.24.3'
+    // SYNUIAN-CUSTOM: 移除 onnxruntime 依赖（本地 OCR 用不到，连远程时 OCR 在服务端处理）
+    // 其自带的 libonnxruntime.so / libonnxruntime4j_jni.so 未做 16KB 对齐，会触发系统警告。
+    // implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.24.3'
     implementation 'androidx.activity:activity:1.12.4'
     implementation 'androidx.core:core:1.16.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
