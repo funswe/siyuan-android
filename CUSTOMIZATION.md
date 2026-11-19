@@ -80,6 +80,11 @@ git push origin main
 
 只改 `RemoteConfig.java` 三个常量：`HOST`、`PORT`、`AUTH_CODE`，然后重新构建即可。
 
+## 已解决的问题（供参考）
+
+1. **小米 16KB 对齐警告弹窗**：debug 构建的 `debuggable=true` 会让 HyperOS 对未 16KB 对齐的 so 弹兼容性警告。已在 `app/build.gradle` 的 debug 块设 `debuggable=false` 消除（不影响功能，包名仍带 .debug 可与官方版共存）。
+2. **启动黑屏 ANR**：`showBootIndex()` 运行在主线程，早期版本在其中做远程网络等待导致主线程阻塞。修复：`waitFotKernelHttpServing()` 的远程分支直接返回（服务已在 bootKernel 的 RemoteBoot 后台线程确认就绪）。
+
 ## 重要提醒
 
 - `AUTH_CODE`（访问授权码）明文写在 APK 里，仅限个人使用。
