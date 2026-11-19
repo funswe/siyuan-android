@@ -53,6 +53,10 @@ android {
         debug {
             applicationIdSuffix = ".debug"
 
+            // SYNUIAN-CUSTOM: 关闭 debuggable，避免小米 HyperOS 对可调试应用弹出
+            // 16KB 页对齐兼容性警告（本地编译的 so 未做 16KB 对齐）。功能不受影响。
+            debuggable = false
+
             minifyEnabled = false
 
             resValue "string", "app_name", "SiYuan-Debug"

@@ -1187,7 +1187,8 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     private void waitFotKernelHttpServing() {
         // ===== SYNUIAN-CUSTOM-BEGIN (remote readiness hook) =====
         if (RemoteConfig.ENABLED) {
-            RemoteKernel.waitForServer();
+            // 远程服务已在 bootKernel() 的 RemoteBoot 后台线程中确认就绪后才回调 bootIndex，
+            // 此处在主线程，绝不能再阻塞做网络等待，否则触发 ANR 黑屏。直接返回。
             return;
         }
         // ===== SYNUIAN-CUSTOM-END =====
