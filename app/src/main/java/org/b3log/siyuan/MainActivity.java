@@ -457,6 +457,10 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
                     bootNavigationCompleted.set(true);
                     forceDefaultBootAppearance = false;
                     stopBootProgressMonitor();
+                    // ===== SYNUIAN-CUSTOM-BEGIN (inject logout menu) =====
+                    // 主页面加载完成后注入"退出登录"菜单项到 #barMore 菜单
+                    RemoteLogout.inject(webView);
+                    // ===== SYNUIAN-CUSTOM-END =====
                 }
                 runOnUiThread(() -> {
                     bootLogo.setVisibility(View.GONE);
@@ -625,6 +629,9 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
 
         jsAndroid = new JSAndroid(this);
         webView.addJavascriptInterface(jsAndroid, "JSAndroid");
+        // ===== SYNUIAN-CUSTOM-BEGIN (logout bridge) =====
+        webView.addJavascriptInterface(new RemoteLogout(this), RemoteLogout.BRIDGE_NAME);
+        // ===== SYNUIAN-CUSTOM-END =====
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
         final WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);

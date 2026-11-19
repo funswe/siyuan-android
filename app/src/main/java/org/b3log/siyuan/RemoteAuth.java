@@ -52,9 +52,9 @@ public final class RemoteAuth {
         return !getAuthCode(context).isEmpty();
     }
 
-    /** 登录提交回调：返回规范化后的 origin 和授权码 */
+    /** 登录提交回调：dismiss 用于校验成功后关闭本对话框 */
     public interface Callback {
-        void onSubmit(String origin, String authCode);
+        void onSubmit(String origin, String authCode, Runnable dismiss);
         void onCancel();
     }
 
@@ -124,7 +124,12 @@ public final class RemoteAuth {
                 Toast.makeText(context, "授权码不能为空", Toast.LENGTH_SHORT).show();
                 return;
             }
-            callback.onSubmit(origin, code);
+            // 传 dismiss 句柄：校验成功后由调用方关闭对话框
+            callback.onSubmit(origin, code, () -> {
+                if (dialog.isShowing()) {
+                    dialog.dismiss();
+                }
+            });
         }));
         dialog.show();
     }

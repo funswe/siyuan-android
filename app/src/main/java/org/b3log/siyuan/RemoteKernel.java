@@ -58,16 +58,22 @@ public final class RemoteKernel {
         // 无授权码：主线程弹登录框
         main.post(() -> RemoteAuth.showLoginDialog(activity, null, new RemoteAuth.Callback() {
             @Override
-            public void onSubmit(final String origin, final String authCode) {
+            public void onSubmit(final String origin, final String authCode, final Runnable dismiss) {
                 new Thread(() -> {
                     if (verify(origin, authCode)) {
                         RemoteSettings.saveOrigin(origin);
                         RemoteAuth.saveAuthCode(activity, authCode);
-                        main.post(() -> Toast.makeText(activity, "登录成功", Toast.LENGTH_SHORT).show());
+                        main.post(() -> {
+                            dismiss.run(); // 关闭登录框
+                            Toast.makeText(activity, "登录成功", Toast.LENGTH_SHORT).show();
+                        });
                         connect(activity, main, origin, authCode, onReady, false);
                     } else {
-                        main.post(() -> showLogin(activity, main, onReady,
-                                "授权码错误，请重新输入（服务器：" + origin + "）"));
+                        main.post(() -> {
+                            dismiss.run(); // 关闭旧框再弹新的，避免叠加
+                            showLogin(activity, main, onReady,
+                                    "授权码错误，请重新输入（服务器：" + origin + "）");
+                        });
                     }
                 }, "RemoteAuth").start();
             }
@@ -84,15 +90,19 @@ public final class RemoteKernel {
                                   final String message) {
         main.post(() -> RemoteAuth.showLoginDialog(activity, message, new RemoteAuth.Callback() {
             @Override
-            public void onSubmit(final String origin, final String authCode) {
+            public void onSubmit(final String origin, final String authCode, final Runnable dismiss) {
                 new Thread(() -> {
                     if (verify(origin, authCode)) {
                         RemoteSettings.saveOrigin(origin);
                         RemoteAuth.saveAuthCode(activity, authCode);
+                        main.post(dismiss); // 关闭登录框
                         connect(activity, main, origin, authCode, onReady, false);
                     } else {
-                        showLogin(activity, main, onReady,
-                                "授权码错误，请重新输入（服务器：" + origin + "）");
+                        main.post(() -> {
+                            dismiss.run(); // 关闭旧框再弹新的
+                            showLogin(activity, main, onReady,
+                                    "授权码错误，请重新输入（服务器：" + origin + "）");
+                        });
                     }
                 }, "RemoteAuth").start();
             }

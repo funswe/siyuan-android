@@ -94,7 +94,11 @@ git push origin main
 - 登录成功后 `MainActivity.refreshServerAddress()` 用输入的地址刷新所有 WebView URL 和校验常量——因此地址是运行时动态的，不再是编译期写死。
 - 相关文件（均为新增，零冲突）：`RemoteAuth.java`（登录框+授权码存储）、`RemoteSettings.java`（地址解析+存储+动态读取）、`RemoteKernel.java`（校验+连接流程）。`RemoteConfig.DEFAULT_ORIGIN` 只是首次登录框的预填默认值。
 
-**清除登录 / 换服务器**：卸载 App 重装，或 adb 执行：
+**退出登录**：进入主界面后，点击底部工具栏最右侧的「三个点」（更多）按钮，菜单里会有「退出登录」项，点击后清除本机保存的地址和授权码并重启 App 回到登录框。
+
+实现：`RemoteLogout.java`（新增文件）——注册一个 JS bridge（`RemoteLogoutBridge`），在页面加载完成后注入 JS，hook `#barMore` 菜单，追加「退出登录」项。不修改 app.zip 前端源码。
+
+**清除登录 / 换服务器**（备用）：卸载 App 重装，或 adb 执行：
 ```
 adb shell run-as org.b3log.siyuan.debug rm -rf shared_prefs
 ```
