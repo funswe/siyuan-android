@@ -19,7 +19,7 @@ $checks = @(
     @{ File = "RemoteLogout.java";  Pattern = "class RemoteLogout";                          Desc = "RemoteLogout bridge class exists" }
     @{ File = "RemoteLogout.java";  Pattern = "BRIDGE_NAME";                                  Desc = "logout JS bridge defined" }
     @{ File = "RemoteAuth.java";    Pattern = "Runnable dismiss";                            Desc = "login dialog dismiss handle exists" }
-    @{ File = "MainActivity.java";  Pattern = "RemoteLogout.inject";                         Desc = "logout menu injection hooked" }
+    @{ File = "MainActivity.java";  Pattern = "addJavascriptInterface(new RemoteLogout";      Desc = "logout bridge registered" }
     @{ File = "MainActivity.java";  Pattern = "SYNUIAN-CUSTOM-BEGIN (remote kernel hook)";   Desc = "bootKernel hook exists" }
     @{ File = "MainActivity.java";  Pattern = "RemoteKernel.start";                          Desc = "remote start delegate call exists" }
     @{ File = "MainActivity.java";  Pattern = "refreshServerAddress";                        Desc = "dynamic address refresh exists" }

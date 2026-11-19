@@ -1,0 +1,42 @@
+<!--
+SYNUIAN-CUSTOM: 思源移动端前端"退出登录"按钮补丁
+
+App 连接远程服务器时，WebView 加载的是【服务器端】的前端页面
+（https://<host>/stage/build/mobile/），而不是 APK 内的 app.zip。
+因此"退出登录"按钮必须打在服务器容器的前端文件里：
+  /opt/siyuan/stage/build/mobile/index.html
+
+把下面这段 <script> 插入到该文件的 </body> 之前。它会在
+"更多"页面的"设置与帮助"分组里追加一个"退出登录"项，
+点击调用 App 注入的 JS bridge：window.RemoteLogoutBridge.logout()
+
+应用方法（在服务器上）：
+  docker cp scripts/frontend-logout-patch.html siyuan:/tmp/patch.html
+  # 用脚本把 <script> 内容插入 index.html 的 </body> 前，然后：
+  docker restart siyuan
+-->
+<script>
+(function(){
+function addLogout(){
+  try{
+    if(!window.siyuan || !window.siyuan.menus) return;
+    if(document.querySelector('[data-siyuan-logout]')) return;
+    var g=document.querySelector('#menu .b3-menu__group[data-menu-group="settings"]');
+    if(!g) return;
+    var box=g.querySelector('.b3-menu__group-items');
+    if(!box) return;
+    var item=document.createElement('div');
+    item.className='b3-menu__item';
+    item.setAttribute('data-siyuan-logout','1');
+    item.innerHTML='<svg class="b3-menu__icon"><use xlink:href="#iconQuit"></use></svg><span class="b3-menu__label">退出登录</span>';
+    item.addEventListener('click',function(ev){
+      ev.stopPropagation(); ev.preventDefault();
+      try{ if(window.RemoteLogoutBridge) window.RemoteLogoutBridge.logout(); }catch(e){}
+    });
+    box.appendChild(item);
+  }catch(e){}
+}
+setInterval(addLogout,500);
+addLogout();
+})();
+</script>

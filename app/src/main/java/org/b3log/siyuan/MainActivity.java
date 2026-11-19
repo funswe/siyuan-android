@@ -457,10 +457,6 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
                     bootNavigationCompleted.set(true);
                     forceDefaultBootAppearance = false;
                     stopBootProgressMonitor();
-                    // ===== SYNUIAN-CUSTOM-BEGIN (inject logout menu) =====
-                    // 主页面加载完成后注入"退出登录"菜单项到 #barMore 菜单
-                    RemoteLogout.inject(webView);
-                    // ===== SYNUIAN-CUSTOM-END =====
                 }
                 runOnUiThread(() -> {
                     bootLogo.setVisibility(View.GONE);
