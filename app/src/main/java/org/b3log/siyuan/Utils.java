@@ -126,7 +126,7 @@ public final class Utils {
                 }
             });
 
-            webView.loadDataWithBaseURL(RemoteConfig.ORIGIN + "/", htmlContent, "text/HTML", "UTF-8", null);
+            webView.loadDataWithBaseURL(RemoteSettings.origin() + "/", htmlContent, "text/HTML", "UTF-8", null);
         });
     }
 
@@ -620,11 +620,11 @@ public final class Utils {
         }
 
         if (url.startsWith("/")) {
-            url = RemoteConfig.ORIGIN + url;
+            url = RemoteSettings.origin() + url;
         }
 
         if (url.startsWith("assets/")) {
-            url = RemoteConfig.ORIGIN + "/" + url;
+            url = RemoteSettings.origin() + "/" + url;
         }
 
         // https://developer.android.google.cn/training/app-links/verify-android-applinks?hl=zh-cn

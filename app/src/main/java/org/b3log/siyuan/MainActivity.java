@@ -124,13 +124,26 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     private static final int REQUEST_SELECT_FILE = 100;
     private static final int REQUEST_CAMERA = 101;
     private static final String SIYUAN_IMAGE_PICKER_ACCEPT_TYPE = "application/x-siyuan-image-picker";
-    private static final String SIYUAN_WEBVIEW_SCHEME = RemoteConfig.SCHEME;
-    private static final String SIYUAN_WEBVIEW_HOST = RemoteConfig.HOST;
-    private static final int SIYUAN_WEBVIEW_PORT = RemoteConfig.PORT;
-    private static final String SIYUAN_MAIN_PAGE_URL = RemoteConfig.MAIN_PAGE_URL;
-    private static final String SIYUAN_BOOT_PAGE_URL =
-            RemoteConfig.BOOT_PAGE_URL + Utils.version;
-    private static final String SIYUAN_BOOT_PROGRESS_URL = RemoteConfig.BOOT_PROGRESS_URL;
+    // ===== SYNUIAN-CUSTOM-BEGIN (dynamic server address) =====
+    // 二开定制：改为可变实例字段，登录成功后由 refreshServerAddress() 从 RemoteSettings 刷新。
+    private String siyuanWebviewScheme = RemoteSettings.scheme();
+    private String siyuanWebviewHost = RemoteSettings.host();
+    private int siyuanWebviewPort = RemoteSettings.port();
+    private String siyuanMainPageUrl = RemoteSettings.mainPageUrl();
+    private String siyuanBootPageUrl = RemoteSettings.bootPageUrl(Utils.version);
+    private String siyuanBootProgressUrl = RemoteSettings.bootProgressUrl();
+
+    /** 登录成功后调用：按用户输入的服务器地址刷新所有 WebView URL / 校验常量 */
+    private void refreshServerAddress() {
+        siyuanWebviewScheme = RemoteSettings.scheme();
+        siyuanWebviewHost = RemoteSettings.host();
+        siyuanWebviewPort = RemoteSettings.port();
+        siyuanMainPageUrl = RemoteSettings.mainPageUrl();
+        siyuanBootPageUrl = RemoteSettings.bootPageUrl(Utils.version);
+        siyuanBootProgressUrl = RemoteSettings.bootProgressUrl();
+        Log.i("remote", "server address refreshed: " + RemoteSettings.origin());
+    }
+    // ===== SYNUIAN-CUSTOM-END =====
     private static final long BOOT_PROGRESS_POLL_INTERVAL = 200;
     private static final long MAIN_PAGE_LOAD_TIMEOUT = 30000;
     private static final long HOVER_MOVE_LOG_INTERVAL = 250;
@@ -324,7 +337,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         webView = findViewById(R.id.webView);
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
-            final String assetPath = AssetDownload.toAssetPath(url, SIYUAN_MAIN_PAGE_URL);
+            final String assetPath = AssetDownload.toAssetPath(url, siyuanMainPageUrl);
             if (null != assetPath) {
                 jsAndroid.saveExportFile(assetPath);
                 return;
@@ -401,7 +414,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
             public boolean shouldOverrideUrlLoading(final WebView view, final WebResourceRequest request) {
                 final Uri uri = request.getUrl();
                 final String url = uri.toString();
-                if (url.contains(SIYUAN_WEBVIEW_HOST) && !url.contains("openExternal")) {
+                if (url.contains(siyuanWebviewHost) && !url.contains("openExternal")) {
                     view.loadUrl(url);
                     return true;
                 }
@@ -629,7 +642,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
             mainPageReady = false;
             bootNavigationCompleted.set(true);
             ws.setMediaPlaybackRequiresUserGesture(true);
-            webView.loadUrl(SIYUAN_MAIN_PAGE_URL);
+            webView.loadUrl(siyuanMainPageUrl);
             scheduleMainPageWatchdog();
         } else {
             loadBootPage();
@@ -690,7 +703,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
                     if (view != bootWebView || isFinishing() || !request.isForMainFrame()) return;
                     if (!forceDefaultBootAppearance) {
                         forceDefaultBootAppearance = true;
-                        view.loadUrl(SIYUAN_BOOT_PAGE_URL + "&appearance=0");
+                        view.loadUrl(siyuanBootPageUrl + "&appearance=0");
                     } else {
                         removeBootWebView();
                     }
@@ -699,12 +712,12 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
             ((ViewGroup) webView.getParent()).addView(bootWebView, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        bootWebView.loadUrl(SIYUAN_BOOT_PAGE_URL + safeParameter);
+        bootWebView.loadUrl(siyuanBootPageUrl + safeParameter);
     }
 
     private boolean isBootPage(final Uri url) {
-        return SIYUAN_WEBVIEW_SCHEME.equals(url.getScheme()) && SIYUAN_WEBVIEW_HOST.equals(url.getHost())
-                && SIYUAN_WEBVIEW_PORT == url.getPort()
+        return siyuanWebviewScheme.equals(url.getScheme()) && siyuanWebviewHost.equals(url.getHost())
+                && siyuanWebviewPort == url.getPort()
                 && ("/appearance/boot/".equals(url.getPath()) || "/appearance/boot/index.html".equals(url.getPath()));
     }
 
@@ -765,7 +778,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     private boolean isKernelBootCompleted() {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(SIYUAN_BOOT_PROGRESS_URL).openConnection();
+            connection = (HttpURLConnection) new URL(siyuanBootProgressUrl).openConnection();
             connection.setConnectTimeout(1000);
             connection.setReadTimeout(1000);
             connection.setUseCaches(false);
@@ -803,11 +816,11 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         forceDefaultBootAppearance = false;
         mainPageReady = false;
         webView.getSettings().setMediaPlaybackRequiresUserGesture(true);
-        webView.loadUrl(SIYUAN_MAIN_PAGE_URL);
+        webView.loadUrl(siyuanMainPageUrl);
     }
 
     private boolean isMainPageNavigation(final String url) {
-        return null != url && url.startsWith(SIYUAN_MAIN_PAGE_URL)
+        return null != url && url.startsWith(siyuanMainPageUrl)
                 && !url.contains("/appearance/boot/");
     }
 
@@ -973,9 +986,9 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         final Uri origin = request.getOrigin();
         final String[] resources = request.getResources();
         return null != origin
-                && SIYUAN_WEBVIEW_SCHEME.equalsIgnoreCase(origin.getScheme())
-                && SIYUAN_WEBVIEW_HOST.equals(origin.getHost())
-                && SIYUAN_WEBVIEW_PORT == origin.getPort()
+                && siyuanWebviewScheme.equalsIgnoreCase(origin.getScheme())
+                && siyuanWebviewHost.equals(origin.getHost())
+                && siyuanWebviewPort == origin.getPort()
                 && null != resources
                 && 1 == resources.length
                 && PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resources[0]);
@@ -1072,7 +1085,10 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         // 二开定制：不启动本地内核，改为连接远程服务器。
         // 合并 upstream 后若本段冲突，保留本 if 块即可；官方原逻辑在 else 中完整保留。
         if (RemoteConfig.ENABLED) {
-            new Thread(() -> RemoteKernel.start(this, this::bootIndex), "RemoteBoot").start();
+            new Thread(() -> RemoteKernel.start(this, () -> {
+                refreshServerAddress(); // 用用户输入/保存的地址刷新所有 URL
+                bootIndex();
+            }), "RemoteBoot").start();
             return;
         }
         // ===== SYNUIAN-CUSTOM-END =====
@@ -1601,7 +1617,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
 
     private static void syncData() {
         try {
-            final AsyncHttpPost req = new com.koushikdutta.async.http.AsyncHttpPost(RemoteConfig.ORIGIN + "/api/sync/performSync");
+            final AsyncHttpPost req = new com.koushikdutta.async.http.AsyncHttpPost(RemoteSettings.origin() + "/api/sync/performSync");
             req.setBody(new JSONObjectBody(new JSONObject().put("mobileSwitch", true)));
             AsyncHttpClient.getDefaultInstance().executeJSONObject(req,
                     new com.koushikdutta.async.http.AsyncHttpClient.JSONObjectCallback() {

@@ -31,8 +31,8 @@ import java.nio.charset.StandardCharsets;
 /**
  * 远程内核连接逻辑（二开定制，新增文件，零冲突）。
  *
- * <p>承载"连接远程服务器"的完整流程：读取本机授权码 → 无则弹登录框 →
- * 校验授权码 → 注入 cookie → 等待服务就绪 → 回调加载页面。</p>
+ * <p>完整流程：读取本机设置 → 无则弹登录框（地址+授权码）→ 校验 →
+ * 保存设置 → 注入 cookie → 等待就绪 → 回调加载页面。</p>
  */
 public final class RemoteKernel {
 
@@ -47,30 +47,52 @@ public final class RemoteKernel {
      */
     public static void start(final Activity activity, final Runnable onReady) {
         final Handler main = new Handler(Looper.getMainLooper());
-        final String saved = RemoteAuth.getAuthCode(activity);
+        final String savedCode = RemoteAuth.getAuthCode(activity);
 
-        if (!saved.isEmpty()) {
-            // 本机已有授权码：后台校验并连接
-            connect(activity, main, saved, onReady, true);
+        if (!savedCode.isEmpty()) {
+            // 本机已有授权码：用当前保存的地址直接校验并连接
+            connect(activity, main, RemoteSettings.origin(), savedCode, onReady, true);
             return;
         }
 
         // 无授权码：主线程弹登录框
         main.post(() -> RemoteAuth.showLoginDialog(activity, null, new RemoteAuth.Callback() {
             @Override
-            public void onSubmit(final String authCode) {
-                // 后台校验
+            public void onSubmit(final String origin, final String authCode) {
                 new Thread(() -> {
-                    if (verify(authCode)) {
+                    if (verify(origin, authCode)) {
+                        RemoteSettings.saveOrigin(origin);
                         RemoteAuth.saveAuthCode(activity, authCode);
-                        main.post(() -> {
-                            // 关闭登录框由 dialog 自行处理较复杂，这里用重新进入连接流程
-                            Toast.makeText(activity, "登录成功", Toast.LENGTH_SHORT).show();
-                        });
-                        connect(activity, main, authCode, onReady, false);
+                        main.post(() -> Toast.makeText(activity, "登录成功", Toast.LENGTH_SHORT).show());
+                        connect(activity, main, origin, authCode, onReady, false);
                     } else {
-                        main.post(() -> RemoteAuth.showLoginDialog(activity,
-                                "授权码错误，请重新输入（服务器：" + RemoteConfig.ORIGIN + "）", this));
+                        main.post(() -> showLogin(activity, main, onReady,
+                                "授权码错误，请重新输入（服务器：" + origin + "）"));
+                    }
+                }, "RemoteAuth").start();
+            }
+
+            @Override
+            public void onCancel() {
+                activity.finish();
+            }
+        }));
+    }
+
+    /** 弹出登录框（带错误提示） */
+    private static void showLogin(final Activity activity, final Handler main, final Runnable onReady,
+                                  final String message) {
+        main.post(() -> RemoteAuth.showLoginDialog(activity, message, new RemoteAuth.Callback() {
+            @Override
+            public void onSubmit(final String origin, final String authCode) {
+                new Thread(() -> {
+                    if (verify(origin, authCode)) {
+                        RemoteSettings.saveOrigin(origin);
+                        RemoteAuth.saveAuthCode(activity, authCode);
+                        connect(activity, main, origin, authCode, onReady, false);
+                    } else {
+                        showLogin(activity, main, onReady,
+                                "授权码错误，请重新输入（服务器：" + origin + "）");
                     }
                 }, "RemoteAuth").start();
             }
@@ -83,64 +105,39 @@ public final class RemoteKernel {
     }
 
     /**
-     * 用给定授权码连接：先确保 cookie 注入成功，再等待服务就绪，最后回调。
+     * 用给定地址和授权码连接：校验 cookie → 等待就绪 → 回调。
      *
-     * @param reAuthOnFail 校验失败时是否清除本机授权码并重试登录框
+     * @param reAuthOnFail 校验失败时是否清除授权码并要求重新登录
      */
-    private static void connect(final Activity activity, final Handler main, final String authCode,
-                                final Runnable onReady, final boolean reAuthOnFail) {
+    private static void connect(final Activity activity, final Handler main, final String origin,
+                                final String authCode, final Runnable onReady, final boolean reAuthOnFail) {
         new Thread(() -> {
-            // 1) 校验 + 注入 cookie
-            if (!verify(authCode)) {
-                Log.w("remote", "auth failed with saved code");
+            if (!verify(origin, authCode)) {
+                Log.w("remote", "auth failed with saved code, origin=" + origin);
                 if (reAuthOnFail) {
                     RemoteAuth.clearAuthCode(activity);
-                    main.post(() -> RemoteAuth.showLoginDialog(activity,
-                            "登录已失效，请重新输入授权码（服务器：" + RemoteConfig.ORIGIN + "）",
-                            new RemoteAuth.Callback() {
-                                @Override
-                                public void onSubmit(final String code) {
-                                    new Thread(() -> {
-                                        if (verify(code)) {
-                                            RemoteAuth.saveAuthCode(activity, code);
-                                            connect(activity, main, code, onReady, false);
-                                        } else {
-                                            main.post(() -> RemoteAuth.showLoginDialog(activity,
-                                                    "授权码错误，请重新输入（服务器：" + RemoteConfig.ORIGIN + "）", this));
-                                        }
-                                    }, "RemoteAuth").start();
-                                }
-
-                                @Override
-                                public void onCancel() {
-                                    activity.finish();
-                                }
-                            }));
+                    showLogin(activity, main, onReady,
+                            "登录已失效或服务器地址已变更，请重新输入（当前：" + origin + "）");
                 }
                 return;
             }
-            // 2) 等待服务就绪
-            waitForServer();
-            // 3) 主线程回调加载页面
-            main.post(onReady);
+            waitForServer(origin);
+            main.post(onReady); // onReady 内部会刷新地址字段并加载页面
         }, "RemoteBoot").start();
     }
 
     /**
-     * 向远程服务器校验授权码，成功则把 siyuan cookie 注入 WebView CookieManager。
-     *
-     * @return true=授权码正确且 cookie 已注入
+     * 向指定服务器校验授权码，成功则把 siyuan cookie 注入 WebView CookieManager。
      */
-    public static boolean verify(final String authCode) {
+    public static boolean verify(final String origin, final String authCode) {
         HttpURLConnection conn = null;
         try {
-            conn = (HttpURLConnection) new URL(RemoteConfig.LOGIN_URL).openConnection();
+            conn = (HttpURLConnection) new URL(origin + "/api/system/loginAuth").openConnection();
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(10000);
             conn.setRequestProperty("Content-Type", "application/json");
-            // 转义授权码中的特殊字符，防止 JSON 注入
             final String safe = authCode.replace("\\", "\\\\").replace("\"", "\\\"");
             final String body = "{\"authCode\":\"" + safe + "\"}";
             final OutputStream os = conn.getOutputStream();
@@ -150,18 +147,19 @@ public final class RemoteKernel {
 
             final int code = conn.getResponseCode();
             final String setCookie = conn.getHeaderField("Set-Cookie");
-            Log.i("remote-auth", "login code=" + code + " cookie=" + (null == setCookie ? "null" : setCookie.split(";")[0]));
+            Log.i("remote-auth", "origin=" + origin + " login code=" + code
+                    + " cookie=" + (null == setCookie ? "null" : setCookie.split(";")[0]));
             if (code == 200 && null != setCookie && !setCookie.isEmpty()) {
                 final String cookie = setCookie.split(";")[0]; // siyuan=xxxxx
                 final android.webkit.CookieManager cm = android.webkit.CookieManager.getInstance();
-                cm.setCookie(RemoteConfig.ORIGIN, cookie);
+                cm.setCookie(origin, cookie);
                 cm.flush();
-                Log.i("remote-auth", "auth cookie injected");
+                Log.i("remote-auth", "auth cookie injected for " + origin);
                 return true;
             }
             return false;
         } catch (final Exception e) {
-            Utils.logError("remote-auth", "authenticate remote server failed", e);
+            Utils.logError("remote-auth", "authenticate failed for " + origin, e);
             return false;
         } finally {
             if (null != conn) {
@@ -170,20 +168,23 @@ public final class RemoteKernel {
         }
     }
 
-    /**
-     * 等待远程内核 HTTP 服务就绪（探测 bootProgress 接口）。
-     */
-    public static void waitForServer() {
+    /** 保留旧签名（兼容可能的其它调用），用当前保存的地址 */
+    public static boolean verify(final String authCode) {
+        return verify(RemoteSettings.origin(), authCode);
+    }
+
+    /** 等待指定服务器的内核 HTTP 服务就绪 */
+    public static void waitForServer(final String origin) {
         HttpURLConnection conn = null;
         for (int i = 0; i < 300; i++) { // 最多约 30 秒
             try {
-                conn = (HttpURLConnection) new URL(RemoteConfig.BOOT_PROGRESS_URL).openConnection();
+                conn = (HttpURLConnection) new URL(origin + "/api/system/bootProgress").openConnection();
                 conn.setRequestMethod("POST");
                 conn.setConnectTimeout(3000);
                 conn.setReadTimeout(3000);
                 final int code = conn.getResponseCode();
                 if (code == 200) {
-                    Log.i("remote", "remote server is ready");
+                    Log.i("remote", "remote server is ready: " + origin);
                     conn.disconnect();
                     return;
                 }
@@ -203,5 +204,10 @@ public final class RemoteKernel {
             }
         }
         Log.i("remote", "remote server not ready after timeout, continue anyway");
+    }
+
+    /** 保留旧签名（兼容） */
+    public static void waitForServer() {
+        waitForServer(RemoteSettings.origin());
     }
 }

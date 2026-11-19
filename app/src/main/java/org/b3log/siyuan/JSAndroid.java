@@ -273,7 +273,7 @@ public final class JSAndroid {
         if (null != item.getUri()) {
             final Uri uri = item.getUri();
             final String url = uri.toString();
-            if (url.startsWith(RemoteConfig.ORIGIN + "/assets/")) {
+            if (url.startsWith(RemoteSettings.origin() + "/assets/")) {
                 final int idx = url.indexOf("assets/");
                 final String asset = url.substring(idx);
                 String name = asset.substring(asset.lastIndexOf("/") + 1);
@@ -346,7 +346,7 @@ public final class JSAndroid {
                 inputStream = new FileInputStream(asset);
             } else {
                 final String imageURL = uri.startsWith("http://") || uri.startsWith("https://")
-                        ? uri : RemoteConfig.ORIGIN + "/" + uri.replaceFirst("^/", "");
+                        ? uri : RemoteSettings.origin() + "/" + uri.replaceFirst("^/", "");
                 connection = (HttpURLConnection) new URL(imageURL).openConnection();
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(30000);
@@ -793,7 +793,7 @@ public final class JSAndroid {
 
             if (!asset.exists()) {
                 Log.e("js", "File does not exist: " + asset.getAbsolutePath());
-                url = RemoteConfig.ORIGIN + "/" + url;
+                url = RemoteSettings.origin() + "/" + url;
                 Utils.openByDefaultBrowser(url, activity);
                 return;
             }

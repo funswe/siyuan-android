@@ -79,23 +79,31 @@ git push origin main
    ```
    首次构建需 `signings.gradle`（从 `signings.templates.gradle` 复制）、`local.properties`（指向 Android SDK）、SDK platform 36 + NDK + build-tools 36。
 
-## 登录鉴权机制（安全设计）
+## 登录与服务器地址（安全设计）
 
-授权码**不硬编码在 APK 里**，避免别人反编译或直接安装后自动登录你的服务器：
+**APK 里不含任何地址或凭据**——服务器地址和授权码都由用户在登录框输入，通用版可连任意思源服务器：
 
-- 首次启动 / 未保存授权码时，弹出登录框让用户输入服务器端设置的访问授权码。
-- 授权码保存在本机 `SharedPreferences`（`RemoteAuth.java`），输一次后免重复输入。
-- 每次连接先用授权码调用 `loginAuth` 校验，失败会提示重新输入；本地授权码失效时自动清除并要求重新登录。
-- 相关文件（均为新增，零冲突）：`RemoteAuth.java`（存储 + 登录框）、`RemoteKernel.java`（校验 + 连接流程）。
+- 首次启动 / 未保存设置时，弹出登录框：
+  - **服务器地址**：可填 `https://siyuan.funswe.com`、`192.168.1.10:6806`、`http://host:6806` 等。
+    - 端口可省略：`https://` 自动按 443，`http://` 和纯 IP 自动按 6806（思源默认）。
+    - 解析逻辑在 `RemoteSettings.normalize()`，规范化为 `scheme://host:port` 并持久化。
+  - **访问授权码**：服务器端「设置 → 关于 → 访问授权码」。
+- 地址和授权码保存在本机 `SharedPreferences`（`RemoteAuth.java` + `RemoteSettings.java`），输一次后免重复输入。
+- 每次连接先用授权码调用 `loginAuth` 校验，失败提示重新输入；本地授权码失效时自动清除并要求重新登录。
+- 登录成功后 `MainActivity.refreshServerAddress()` 用输入的地址刷新所有 WebView URL 和校验常量——因此地址是运行时动态的，不再是编译期写死。
+- 相关文件（均为新增，零冲突）：`RemoteAuth.java`（登录框+授权码存储）、`RemoteSettings.java`（地址解析+存储+动态读取）、`RemoteKernel.java`（校验+连接流程）。`RemoteConfig.DEFAULT_ORIGIN` 只是首次登录框的预填默认值。
 
-**清除登录 / 切换账号**：卸载 App 重装，或 adb 执行：
+**清除登录 / 换服务器**：卸载 App 重装，或 adb 执行：
 ```
 adb shell run-as org.b3log.siyuan.debug rm -rf shared_prefs
 ```
+（重新打开会弹出登录框，可输入新的地址和授权码。）
 
-## 修改服务器地址
+**关于登录方式**：自托管思源 Docker 版本身没有用户名/密码登录，只有「访问授权码」这一种鉴权。新版本支持 OIDC（对接 Google/Microsoft/GitHub 等第三方），但不是思源自带的账密。官方云端服务用 b3log 账号密码，与自托管不同。
 
-只改 `RemoteConfig.java` 的 `SCHEME`、`HOST`、`PORT` 三个常量，然后重新构建即可。授权码不再写在这里，由用户在登录框输入。
+## 修改默认预填地址（可选）
+
+登录框会预填 `RemoteConfig.DEFAULT_ORIGIN`。要改这个默认值，只改 `RemoteConfig.java` 的 `DEFAULT_ORIGIN` 常量即可（用户仍可在登录框改成任意地址）。
 
 ## 已解决的问题（供参考）
 

@@ -15,13 +15,14 @@ import android.content.SharedPreferences;
 import android.text.InputType;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * 远程服务器授权码管理（二开定制，新增文件，零冲突）。
+ * 远程服务器登录管理（二开定制，新增文件，零冲突）。
  *
- * <p>授权码不再硬编码在 APK 里，而是由用户输入并保存在本机 SharedPreferences。
- * 这样别人拿到 APK 也不知授权码，必须先登录。</p>
+ * <p>服务器地址和授权码都由用户输入并保存在本机 SharedPreferences，
+ * APK 里不含任何地址或凭据，别人拿到也无法直接登录。</p>
  */
 public final class RemoteAuth {
 
@@ -31,69 +32,92 @@ public final class RemoteAuth {
     private RemoteAuth() {
     }
 
-    /** 读取本机保存的授权码，未保存返回空串 */
     public static String getAuthCode(final Context context) {
         final SharedPreferences sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         return sp.getString(KEY_AUTH_CODE, "");
     }
 
-    /** 保存授权码到本机 */
     public static void saveAuthCode(final Context context, final String authCode) {
         final SharedPreferences sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         sp.edit().putString(KEY_AUTH_CODE, authCode).apply();
     }
 
-    /** 清除授权码（退出登录） */
     public static void clearAuthCode(final Context context) {
         final SharedPreferences sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         sp.edit().remove(KEY_AUTH_CODE).apply();
     }
 
-    /** 是否已有授权码 */
     public static boolean hasAuthCode(final Context context) {
         return !getAuthCode(context).isEmpty();
     }
 
-    /** 登录结果回调 */
+    /** 登录提交回调：返回规范化后的 origin 和授权码 */
     public interface Callback {
-        void onSubmit(String authCode);
+        void onSubmit(String origin, String authCode);
         void onCancel();
     }
 
     /**
-     * 显示登录对话框（纯代码构建，不依赖官方 layout 资源，合并 upstream 零冲突）。
+     * 显示登录对话框：服务器地址 + 授权码两个输入框（纯代码构建，合并 upstream 零冲突）。
+     *
+     * @param message 提示信息，null 时用默认提示
      */
     public static void showLoginDialog(final Context context, final String message, final Callback callback) {
-        final EditText input = new EditText(context);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        input.setHint("访问授权码");
-        input.setSingleLine(true);
         final int pad = 24;
-        input.setPadding(pad, pad, pad, pad);
+
+        // 服务器地址输入框
+        final TextView urlLabel = new TextView(context);
+        urlLabel.setText("服务器地址（可带端口，也可只填域名/IP）");
+        urlLabel.setPadding(pad, 8, pad, 0);
+
+        final EditText urlInput = new EditText(context);
+        urlInput.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
+        urlInput.setHint("例：https://siyuan.funswe.com 或 192.168.1.10:6806");
+        urlInput.setSingleLine(true);
+        urlInput.setPadding(pad, 4, pad, 16);
+        urlInput.setText(RemoteSettings.origin()); // 预填当前/默认地址
+
+        // 授权码输入框
+        final TextView codeLabel = new TextView(context);
+        codeLabel.setText("访问授权码");
+        codeLabel.setPadding(pad, 8, pad, 0);
+
+        final EditText codeInput = new EditText(context);
+        codeInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        codeInput.setHint("服务器端设置的访问授权码");
+        codeInput.setSingleLine(true);
+        codeInput.setPadding(pad, 4, pad, 8);
+        codeInput.setText(RemoteAuth.getAuthCode(context)); // 预填已保存的授权码
 
         final LinearLayout container = new LinearLayout(context);
-        container.setPadding(pad, 8, pad, 8);
-        container.addView(input, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.addView(urlLabel);
+        container.addView(urlInput);
+        container.addView(codeLabel);
+        container.addView(codeInput);
 
         final AlertDialog dialog = new AlertDialog.Builder(context)
                 .setTitle("连接思源服务器")
                 .setMessage(null == message || message.isEmpty()
-                        ? "服务器：" + RemoteConfig.ORIGIN + "\n\n请输入服务器端设置的访问授权码"
-                        : message)
+                        ? "请输入服务器地址和授权码" : message)
                 .setView(container)
                 .setCancelable(false)
-                .setPositiveButton("登录", null) // 下面手动设置，避免输错时对话框被关掉
+                .setPositiveButton("登录", null) // 手动设置，校验失败时保持弹窗
                 .setNegativeButton("退出", (d, w) -> callback.onCancel())
                 .create();
 
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            final String code = input.getText().toString().trim();
+            final String origin = RemoteSettings.normalize(urlInput.getText().toString());
+            if (origin == null) {
+                Toast.makeText(context, "服务器地址格式不正确", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            final String code = codeInput.getText().toString().trim();
             if (code.isEmpty()) {
                 Toast.makeText(context, "授权码不能为空", Toast.LENGTH_SHORT).show();
                 return;
             }
-            callback.onSubmit(code); // 由调用方决定是否 dismiss（校验成功后再关）
+            callback.onSubmit(origin, code);
         }));
         dialog.show();
     }
