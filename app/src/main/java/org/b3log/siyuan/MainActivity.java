@@ -124,14 +124,13 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     private static final int REQUEST_SELECT_FILE = 100;
     private static final int REQUEST_CAMERA = 101;
     private static final String SIYUAN_IMAGE_PICKER_ACCEPT_TYPE = "application/x-siyuan-image-picker";
-    private static final String SIYUAN_WEBVIEW_SCHEME = "http";
-    private static final String SIYUAN_WEBVIEW_HOST = "127.0.0.1";
-    private static final int SIYUAN_WEBVIEW_PORT = 6806;
-    private static final String SIYUAN_MAIN_PAGE_URL = "http://127.0.0.1:6806/";
+    private static final String SIYUAN_WEBVIEW_SCHEME = RemoteConfig.SCHEME;
+    private static final String SIYUAN_WEBVIEW_HOST = RemoteConfig.HOST;
+    private static final int SIYUAN_WEBVIEW_PORT = RemoteConfig.PORT;
+    private static final String SIYUAN_MAIN_PAGE_URL = RemoteConfig.MAIN_PAGE_URL;
     private static final String SIYUAN_BOOT_PAGE_URL =
-            "http://127.0.0.1:6806/appearance/boot/index.html?v=" + Utils.version;
-    private static final String SIYUAN_BOOT_PROGRESS_URL =
-            "http://127.0.0.1:6806/api/system/bootProgress";
+            RemoteConfig.BOOT_PAGE_URL + Utils.version;
+    private static final String SIYUAN_BOOT_PROGRESS_URL = RemoteConfig.BOOT_PROGRESS_URL;
     private static final long BOOT_PROGRESS_POLL_INTERVAL = 200;
     private static final long MAIN_PAGE_LOAD_TIMEOUT = 30000;
     private static final long HOVER_MOVE_LOG_INTERVAL = 250;
@@ -402,7 +401,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
             public boolean shouldOverrideUrlLoading(final WebView view, final WebResourceRequest request) {
                 final Uri uri = request.getUrl();
                 final String url = uri.toString();
-                if (url.contains("127.0.0.1") && !url.contains("openExternal")) {
+                if (url.contains(SIYUAN_WEBVIEW_HOST) && !url.contains("openExternal")) {
                     view.loadUrl(url);
                     return true;
                 }
@@ -1069,38 +1068,55 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     };
 
     private void bootKernel() {
-        if (Mobile.isHttpServing()) {
-            Log.i("kernel", "Kernel HTTP server is running");
-            bootIndex();
-            return;
-        }
+        // ===== 二开定制：不启动本地内核，连接远程服务器 =====
+        // 原逻辑会在手机上调用 Mobile.startKernel 启动本地 Go 内核；
+        // 现在改为异步完成：1) 登录远程服务器拿到鉴权 cookie 2) 探测服务就绪 3) 加载页面。
+        new Thread(() -> {
+            // 1) 远程鉴权：loginAuth 拿到 Set-Cookie 并注入 WebView CookieManager
+            authenticateRemoteServer();
+            // 2) 等待远程服务就绪
+            waitFotKernelHttpServing();
+            // 3) 回到主线程加载页面
+            runOnUiThread(this::bootIndex);
+        }, "RemoteBoot").start();
+    }
 
+    /**
+     * 二开定制：向远程思源服务器登录，拿到 siyuan 鉴权 cookie 并注入 WebView。
+     * 3.8.x 服务端在未登录时访问主页会返回 401，必须先登录拿 cookie。
+     */
+    private void authenticateRemoteServer() {
+        HttpURLConnection conn = null;
         try {
-            new Thread(() -> {
-                final String channel = Utils.getChannel(this.getPackageManager());
-                if ("cn".equals(channel) || "huawei".equals(channel)) {
-                    Mobile.disableFeature("ai");
-                }
+            conn = (HttpURLConnection) new URL(RemoteConfig.LOGIN_URL).openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            conn.setRequestProperty("Content-Type", "application/json");
+            final String body = "{\"authCode\":\"" + RemoteConfig.AUTH_CODE + "\"}";
+            final java.io.OutputStream os = conn.getOutputStream();
+            os.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            os.flush();
+            os.close();
 
-                final String appDir = getFilesDir().getAbsolutePath() + "/app";
-                final String workspaceBaseDir = getExternalFilesDir(null).getAbsolutePath();
-                final String timezone = TimeZone.getDefault().getID();
-                final String localIPs = Utils.getLANIPAddressList(this);
-                final String langCode = Utils.getLanguage();
-                Mobile.startKernel("android", appDir, workspaceBaseDir, timezone, localIPs, langCode,
-                        Build.VERSION.RELEASE +
-                                "/SDK " + Build.VERSION.SDK_INT +
-                                "/WebView " + webViewVer +
-                                "/Manufacturer " + android.os.Build.MANUFACTURER +
-                                "/Brand " + android.os.Build.BRAND +
-                                "/UA " + userAgent);
-            }).start();
+            final int code = conn.getResponseCode();
+            final String setCookie = conn.getHeaderField("Set-Cookie");
+            Log.i("remote-auth", "login code=" + code + " cookie=" + (null == setCookie ? "null" : setCookie.split(";")[0]));
+            if (code == 200 && null != setCookie && !setCookie.isEmpty()) {
+                final String cookie = setCookie.split(";")[0]; // siyuan=xxxxx
+                final CookieManager cm = CookieManager.getInstance();
+                cm.setCookie(RemoteConfig.ORIGIN, cookie);
+                cm.flush();
+                Log.i("remote-auth", "auth cookie injected");
+            }
         } catch (final Exception e) {
-            Utils.logError("kernel", "boot kernel failed", e);
-            return;
+            Utils.logError("remote-auth", "authenticate remote server failed", e);
+        } finally {
+            if (null != conn) {
+                conn.disconnect();
+            }
         }
-
-        bootIndex();
     }
 
     private WebResourceResponse handleRequest(String urlString, Map<String, String> headers) {
@@ -1170,15 +1186,33 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
     }
 
     /**
-     * 等待内核 HTTP 服务伺服。
+     * 二开定制：等待远程内核 HTTP 服务就绪（探测 bootProgress 接口）。
      */
     private void waitFotKernelHttpServing() {
-        while (true) {
-            sleep(10);
-            if (Mobile.isHttpServing()) {
-                break;
+        HttpURLConnection conn = null;
+        for (int i = 0; i < 300; i++) { // 最多约 30 秒
+            try {
+                conn = (HttpURLConnection) new URL(RemoteConfig.BOOT_PROGRESS_URL).openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(3000);
+                conn.setReadTimeout(3000);
+                final int code = conn.getResponseCode();
+                if (code == 200) {
+                    Log.i("remote", "remote server is ready");
+                    conn.disconnect();
+                    return;
+                }
+            } catch (final Exception ignored) {
+                // 服务器还没就绪，继续重试
+            } finally {
+                if (null != conn) {
+                    conn.disconnect();
+                    conn = null;
+                }
             }
+            sleep(100);
         }
+        Log.i("remote", "remote server not ready after timeout, continue anyway");
     }
 
     private void initAppearance() {
@@ -1586,7 +1620,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
 
     private static void syncData() {
         try {
-            final AsyncHttpPost req = new com.koushikdutta.async.http.AsyncHttpPost("http://127.0.0.1:6806/api/sync/performSync");
+            final AsyncHttpPost req = new com.koushikdutta.async.http.AsyncHttpPost(RemoteConfig.ORIGIN + "/api/sync/performSync");
             req.setBody(new JSONObjectBody(new JSONObject().put("mobileSwitch", true)));
             AsyncHttpClient.getDefaultInstance().executeJSONObject(req,
                     new com.koushikdutta.async.http.AsyncHttpClient.JSONObjectCallback() {
