@@ -79,9 +79,23 @@ git push origin main
    ```
    首次构建需 `signings.gradle`（从 `signings.templates.gradle` 复制）、`local.properties`（指向 Android SDK）、SDK platform 36 + NDK + build-tools 36。
 
+## 登录鉴权机制（安全设计）
+
+授权码**不硬编码在 APK 里**，避免别人反编译或直接安装后自动登录你的服务器：
+
+- 首次启动 / 未保存授权码时，弹出登录框让用户输入服务器端设置的访问授权码。
+- 授权码保存在本机 `SharedPreferences`（`RemoteAuth.java`），输一次后免重复输入。
+- 每次连接先用授权码调用 `loginAuth` 校验，失败会提示重新输入；本地授权码失效时自动清除并要求重新登录。
+- 相关文件（均为新增，零冲突）：`RemoteAuth.java`（存储 + 登录框）、`RemoteKernel.java`（校验 + 连接流程）。
+
+**清除登录 / 切换账号**：卸载 App 重装，或 adb 执行：
+```
+adb shell run-as org.b3log.siyuan.debug rm -rf shared_prefs
+```
+
 ## 修改服务器地址
 
-只改 `RemoteConfig.java` 三个常量：`HOST`、`PORT`、`AUTH_CODE`，然后重新构建即可。
+只改 `RemoteConfig.java` 的 `SCHEME`、`HOST`、`PORT` 三个常量，然后重新构建即可。授权码不再写在这里，由用户在登录框输入。
 
 ## 已解决的问题（供参考）
 

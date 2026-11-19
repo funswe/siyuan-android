@@ -11,8 +11,10 @@ $checks = @(
     @{ File = "RemoteConfig.java";  Pattern = "class RemoteConfig";                          Desc = "RemoteConfig class exists" }
     @{ File = "RemoteKernel.java";  Pattern = "class RemoteKernel";                          Desc = "RemoteKernel class exists" }
     @{ File = "RemoteConfig.java";  Pattern = "ENABLED = true";                              Desc = "remote master switch is ON" }
+    @{ File = "RemoteAuth.java";    Pattern = "class RemoteAuth";                            Desc = "RemoteAuth login class exists" }
+    @{ File = "RemoteAuth.java";    Pattern = "getSharedPreferences";                        Desc = "auth code stored locally" }
     @{ File = "MainActivity.java";  Pattern = "SYNUIAN-CUSTOM-BEGIN (remote kernel hook)";   Desc = "bootKernel hook exists" }
-    @{ File = "MainActivity.java";  Pattern = "RemoteKernel.authenticate";                   Desc = "auth delegate call exists" }
+    @{ File = "MainActivity.java";  Pattern = "RemoteKernel.start";                          Desc = "remote start delegate call exists" }
     @{ File = "MainActivity.java";  Pattern = "SYNUIAN-CUSTOM-BEGIN (remote readiness hook)";Desc = "readiness hook exists" }
     @{ File = "MainActivity.java";  Pattern = "SIYUAN_MAIN_PAGE_URL = RemoteConfig";         Desc = "main page URL points to RemoteConfig" }
     @{ File = "JSAndroid.java";     Pattern = "RemoteConfig.ORIGIN";                         Desc = "JSAndroid address migrated" }
@@ -40,6 +42,14 @@ if ($leftover) {
     $leftover | ForEach-Object { "   $($_.Filename):$($_.LineNumber)" }
 } else {
     Write-Output "[ OK ] no leftover hardcoded addresses"
+}
+
+# 确认没有把授权码硬编码进源码
+$hardcoded = Select-String -Path "$javaDir\RemoteConfig.java" -Pattern 'AUTH_CODE\s*=|\w{6,}546883298|zmf546883298'
+if ($hardcoded) {
+    Write-Output "[FAIL] hardcoded auth code still present in RemoteConfig.java"; $fail++
+} else {
+    Write-Output "[ OK ] no hardcoded auth code in source"
 }
 
 Write-Output "======================================"

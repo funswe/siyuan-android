@@ -1072,11 +1072,7 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         // 二开定制：不启动本地内核，改为连接远程服务器。
         // 合并 upstream 后若本段冲突，保留本 if 块即可；官方原逻辑在 else 中完整保留。
         if (RemoteConfig.ENABLED) {
-            new Thread(() -> {
-                RemoteKernel.authenticate();
-                RemoteKernel.waitForServer();
-                runOnUiThread(this::bootIndex);
-            }, "RemoteBoot").start();
+            new Thread(() -> RemoteKernel.start(this, this::bootIndex), "RemoteBoot").start();
             return;
         }
         // ===== SYNUIAN-CUSTOM-END =====

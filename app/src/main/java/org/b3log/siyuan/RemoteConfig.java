@@ -29,15 +29,15 @@ public final class RemoteConfig {
     /** 总开关：true=连接远程服务器；false=使用官方本地内核逻辑 */
     public static final boolean ENABLED = true;
     /** 远程服务器协议 */
-    public static final String SCHEME = "http";
-    /** 远程服务器主机（飞牛 NAS 的局域网 IP） */
-    public static final String HOST = "192.168.31.205";
-    /** 远程服务器端口 */
-    public static final int PORT = 6806;
-    /** 访问授权码（服务器端 设置-关于-访问授权码） */
-    public static final String AUTH_CODE = "zmf546883298";
+    public static final String SCHEME = "https";
+    /** 远程服务器主机（公网域名，经反代） */
+    public static final String HOST = "siyuan.funswe.com";
+    /** 远程服务器端口（HTTPS 默认 443，显式写出以匹配 URL 端口校验） */
+    public static final int PORT = 443;
+    // 授权码不再硬编码：由用户在登录框输入，保存在本机 SharedPreferences（见 RemoteAuth）。
+    // 这样 APK 里没有任何凭据，别人拿到也无法直接登录。
 
-    /** 服务根地址，例如 http://192.168.31.205:6806 */
+    /** 服务根地址，例如 https://siyuan.funswe.com:443 */
     public static final String ORIGIN = SCHEME + "://" + HOST + ":" + PORT;
     /** 主页面地址 */
     public static final String MAIN_PAGE_URL = ORIGIN + "/";
