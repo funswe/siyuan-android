@@ -99,6 +99,15 @@ git push origin main
 实现（关键：**改前端代码，不是 JS 注入**）：
 - App 连远程时，WebView 加载的是**服务器端**的前端页面（`https://<host>/stage/build/mobile/`），不是 APK 里的 app.zip。所以退出登录按钮必须打在**服务器容器**的前端文件里。
 - 修改服务器上 `/opt/siyuan/stage/build/mobile/index.html`，在 `</body>` 前插入 `scripts/frontend-logout-patch.html` 里的脚本：往 `#menu` 的 `data-menu-group="settings"` 分组追加「退出登录」项，点击调用 App 注入的 JS bridge `RemoteLogoutBridge.logout()`。
+- **⚠️ 关键坑**：必须基于【服务器容器自己的】index.html 来改，**绝不能用本地 app.zip 里的 index.html 覆盖**。因为两端思源版本可能不同，index.html 里引用的 `main.<hash>.js` 文件名带版本哈希；若用本地版本覆盖，哈希和服务器实际 JS 文件不匹配，会导致前端加载失败、App 卡在"思源启动失败"黑屏。
+  正确步骤：
+  ```
+  docker cp siyuan:/opt/siyuan/stage/build/mobile/index.html /tmp/orig.html   # 取出服务器当前版本
+  # 在本地给 /tmp/orig.html 的 </body> 前插入补丁脚本
+  docker cp /tmp/patched.html siyuan:/opt/siyuan/stage/build/mobile/index.html
+  docker restart siyuan   # 重启让内核重新加载前端（有内存缓存）
+  ```
+  手机端也要清一次 WebView 缓存（卸载重装或删 app_webview/cache），否则会用到旧的错误 index.html 缓存。
 - App 侧 `RemoteLogout.java`（新增文件）只负责注册 bridge 和执行退出（清凭据+重启），不含任何注入逻辑。
 - 容器重建会丢失该文件改动，恢复命令：
   ```
