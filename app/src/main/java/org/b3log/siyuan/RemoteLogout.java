@@ -75,8 +75,15 @@ public final class RemoteLogout {
             + "    var menus=document.querySelectorAll('.b3-menu');"
             + "    for(var i=0;i<menus.length;i++){"
             + "      var menu=menus[i];"
-            + "      if(menu.getAttribute('data-name')!=='barmore')continue;"
-            + "      if(menu.offsetParent===null)continue;" // 不可见的菜单跳过
+            + "      var r=menu.getBoundingClientRect();"
+            + "      if(r.width<=0||r.height<=0)continue;" // 不可见跳过
+            + "      // 识别底部'更多'菜单：含'文档'和'大纲'标签项"
+            + "      var labels=menu.querySelectorAll('.b3-menu__label');"
+            + "      var isMoreMenu=false;"
+            + "      for(var j=0;j<labels.length;j++){"
+            + "        if(labels[j].textContent==='文档'){isMoreMenu=true;break;}"
+            + "      }"
+            + "      if(!isMoreMenu)continue;"
             + "      if(menu.querySelector('[data-siyuan-logout]'))continue;" // 已加过
             + "      var item=document.createElement('div');"
             + "      item.className='b3-menu__item';"
@@ -84,20 +91,24 @@ public final class RemoteLogout {
             + "      item.innerHTML='<svg class=\"b3-menu__icon\"><use xlink:href=\"#iconQuit\"></use></svg>'"
             + "        +'<span class=\"b3-menu__label\">退出登录</span>';"
             + "      item.addEventListener('click',function(ev){"
-            + "        ev.stopPropagation();"
+            + "        ev.stopPropagation();ev.preventDefault();"
             + "        try{" + BRIDGE_NAME + ".logout();}catch(e){}"
             + "      });"
             + "      menu.appendChild(item);"
+            + "      return;"
             + "    }"
             + "  }catch(e){}"
             + "}"
-            // MutationObserver：菜单 DOM 变化后立即补项
-            + "try{"
-            + "  new MutationObserver(ensureItem).observe(document.body,"
-            + "    {childList:true,subtree:true,attributes:true});"
-            + "}catch(e){}"
-            // 定时轮询兜底（菜单重建会覆盖，定时确保始终存在）
-            + "setInterval(ensureItem,400);"
-            + "ensureItem();"
+            // 点 toolbarMore 后立即补项（延时等菜单构建完成）
+            + "document.addEventListener('click',function(e){"
+            + "  var t=e.target;"
+            + "  if(t&&t.closest&&t.closest('#toolbarMore')){"
+            + "    setTimeout(ensureItem,80);setTimeout(ensureItem,300);"
+            + "  }"
+            + "},true);"
+            // MutationObserver + 定时轮询兜底
+            + "try{new MutationObserver(ensureItem).observe(document.body,"
+            + "  {childList:true,subtree:true});}catch(e){}"
+            + "setInterval(ensureItem,500);"
             + "})();";
 }

@@ -636,7 +636,11 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         final WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
-        ws.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        // ===== SYNUIAN-CUSTOM-BEGIN (enable cache for remote server) =====
+        // 二开定制：连远程时允许缓存前端资源，避免每次启动都下载 5.7MB 的 JS 造成长时间黑屏。
+        // LOAD_DEFAULT 在有缓存时用缓存、无缓存时才走网络。本地模式官方原值是 LOAD_NO_CACHE。
+        ws.setCacheMode(RemoteConfig.ENABLED ? WebSettings.LOAD_DEFAULT : WebSettings.LOAD_NO_CACHE);
+        // ===== SYNUIAN-CUSTOM-END =====
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         ws.setTextZoom(100);
         ws.setUseWideViewPort(true);
