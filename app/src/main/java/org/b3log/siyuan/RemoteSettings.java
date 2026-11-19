@@ -42,10 +42,9 @@ public final class RemoteSettings {
         sp().edit().putString(KEY_ORIGIN, origin).apply();
     }
 
-    /** 读取当前 origin（未设置则回退默认值） */
+    /** 读取当前 origin（未设置返回空串，不携带任何默认服务器地址） */
     public static String origin() {
-        final String saved = sp().getString(KEY_ORIGIN, "");
-        return saved.isEmpty() ? RemoteConfig.DEFAULT_ORIGIN : saved;
+        return sp().getString(KEY_ORIGIN, "");
     }
 
     public static String scheme() {

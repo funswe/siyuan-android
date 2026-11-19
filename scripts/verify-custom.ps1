@@ -55,6 +55,16 @@ if ($hardcoded) {
     Write-Output "[ OK ] no hardcoded auth code in source"
 }
 
+# No default server address baked into the APK
+$defaultAddr = Select-String -Path "$javaDir\*.java" -Pattern 'funswe\.com|DEFAULT_ORIGIN'
+if ($defaultAddr) {
+    Write-Output "[FAIL] default server address found in source:"
+    $defaultAddr | ForEach-Object { "   $($_.Filename):$($_.LineNumber)" }
+    $fail++
+} else {
+    Write-Output "[ OK ] no default server address in source"
+}
+
 Write-Output "======================================"
 if ($fail -eq 0) { Write-Output "All checks passed. Safe to rebuild."; exit 0 }
 else { Write-Output "$fail check(s) failed. Customization may be lost after merge; see CUSTOMIZATION.md."; exit 1 }

@@ -83,10 +83,11 @@ git push origin main
 
 **APK 里不含任何地址或凭据**——服务器地址和授权码都由用户在登录框输入，通用版可连任意思源服务器：
 
-- 首次启动 / 未保存设置时，弹出登录框：
-  - **服务器地址**：可填 `https://siyuan.funswe.com`、`192.168.1.10:6806`、`http://host:6806` 等。
+- 首次启动 / 未保存设置时，弹出登录框（两个输入框都为空，APK 里不含任何默认地址或授权码）：
+  - **服务器地址**：可填 `https://your-domain.com`、`192.168.1.10:6806`、`http://host:6806` 等。
     - 端口可省略：`https://` 自动按 443，`http://` 和纯 IP 自动按 6806（思源默认）。
     - 解析逻辑在 `RemoteSettings.normalize()`，规范化为 `scheme://host:port` 并持久化。
+    - 仅在重新登录时会回填上次保存的地址；首次启动留空。
   - **访问授权码**：服务器端「设置 → 关于 → 访问授权码」。
 - 地址和授权码保存在本机 `SharedPreferences`（`RemoteAuth.java` + `RemoteSettings.java`），输一次后免重复输入。
 - 每次连接先用授权码调用 `loginAuth` 校验，失败提示重新输入；本地授权码失效时自动清除并要求重新登录。
@@ -101,9 +102,11 @@ adb shell run-as org.b3log.siyuan.debug rm -rf shared_prefs
 
 **关于登录方式**：自托管思源 Docker 版本身没有用户名/密码登录，只有「访问授权码」这一种鉴权。新版本支持 OIDC（对接 Google/Microsoft/GitHub 等第三方），但不是思源自带的账密。官方云端服务用 b3log 账号密码，与自托管不同。
 
-## 修改默认预填地址（可选）
+## 关于默认地址
 
-登录框会预填 `RemoteConfig.DEFAULT_ORIGIN`。要改这个默认值，只改 `RemoteConfig.java` 的 `DEFAULT_ORIGIN` 常量即可（用户仍可在登录框改成任意地址）。
+没有默认地址。`RemoteConfig` 只保留一个总开关 `ENABLED`，不含任何服务器地址或授权码。所有地址/凭据都来自用户在登录框的输入，保存在本机。
+
+`RemoteSettings.origin()` 在未保存时返回空串，`RemoteAuth` 登录框首次启动地址栏为空。
 
 ## 已解决的问题（供参考）
 

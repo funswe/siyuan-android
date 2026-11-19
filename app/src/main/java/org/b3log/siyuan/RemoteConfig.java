@@ -18,28 +18,15 @@
 package org.b3log.siyuan;
 
 /**
- * 远程连接默认配置（二开定制，新增文件，零冲突）。
+ * 远程连接总开关（二开定制，新增文件，零冲突）。
  *
- * <p>这里只放【默认值】：用户首次启动、尚未输入服务器地址时用它。
- * 用户输入后保存在 RemoteSettings（SharedPreferences），运行时以 RemoteSettings 为准。
- * 授权码完全不写在这里，由用户在登录框输入。</p>
+ * <p>不携带任何服务器地址或授权码：地址与授权码都由用户在登录框输入，
+ * 保存在本机 RemoteSettings / RemoteAuth（SharedPreferences）。
+ * APK 里没有任何默认服务器信息，别人拿到也无法预知要连哪里。</p>
  */
 public final class RemoteConfig {
-    /** 总开关：true=连接远程服务器；false=使用官方本地内核逻辑 */
+    /** true=连接远程服务器（地址/授权码由用户输入）；false=使用官方本地内核逻辑 */
     public static final boolean ENABLED = true;
-
-    /** 默认服务器地址（用户未输入时使用；用户在登录框输入后会覆盖并持久化） */
-    public static final String DEFAULT_ORIGIN = "https://siyuan.funswe.com:443";
-
-    // 以下为兼容旧引用保留的默认值常量；运行时逻辑应优先使用 RemoteSettings 的动态方法。
-    public static final String SCHEME = "https";
-    public static final String HOST = "siyuan.funswe.com";
-    public static final int PORT = 443;
-    public static final String ORIGIN = DEFAULT_ORIGIN;
-    public static final String MAIN_PAGE_URL = ORIGIN + "/";
-    public static final String BOOT_PAGE_URL = ORIGIN + "/appearance/boot/index.html?v=";
-    public static final String BOOT_PROGRESS_URL = ORIGIN + "/api/system/bootProgress";
-    public static final String LOGIN_URL = ORIGIN + "/api/system/loginAuth";
 
     private RemoteConfig() {
     }

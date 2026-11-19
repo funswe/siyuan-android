@@ -28,6 +28,7 @@ public final class RemoteAuth {
 
     private static final String PREF_NAME = "siyuan_remote_auth";
     private static final String KEY_AUTH_CODE = "auth_code";
+    private static final String KEY_ORIGIN = "server_origin"; // 与 RemoteSettings 共用
 
     private RemoteAuth() {
     }
@@ -72,10 +73,16 @@ public final class RemoteAuth {
 
         final EditText urlInput = new EditText(context);
         urlInput.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
-        urlInput.setHint("例：https://siyuan.funswe.com 或 192.168.1.10:6806");
+        urlInput.setHint("例：https://your-domain.com 或 192.168.1.10:6806");
         urlInput.setSingleLine(true);
         urlInput.setPadding(pad, 4, pad, 16);
-        urlInput.setText(RemoteSettings.origin()); // 预填当前/默认地址
+        // 不预填默认地址：APK 里不携带任何默认服务器地址。
+        // 仅当本机曾保存过地址（重新登录场景）时才回填，方便用户修改。
+        final android.content.SharedPreferences sp = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        final String savedOrigin = sp.getString(KEY_ORIGIN, "");
+        if (!savedOrigin.isEmpty()) {
+            urlInput.setText(savedOrigin);
+        }
 
         // 授权码输入框
         final TextView codeLabel = new TextView(context);
