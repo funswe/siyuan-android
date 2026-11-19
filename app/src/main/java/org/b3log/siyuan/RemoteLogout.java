@@ -70,20 +70,34 @@ public final class RemoteLogout {
             "(function(){"
             + "if(window.__remoteLogoutInjected)return;"
             + "window.__remoteLogoutInjected=true;"
-            + "function addItem(){"
+            + "function ensureItem(){"
             + "  try{"
-            + "    var m=window.siyuan&&window.siyuan.menus&&window.siyuan.menus.menu;"
-            + "    if(!m||!m.addItem)return;"
-            + "    m.addItem({icon:'#iconLogout',label:'退出登录',"
-            + "      click:function(){ " + BRIDGE_NAME + ".logout(); }});"
+            + "    var menus=document.querySelectorAll('.b3-menu');"
+            + "    for(var i=0;i<menus.length;i++){"
+            + "      var menu=menus[i];"
+            + "      if(menu.getAttribute('data-name')!=='barmore')continue;"
+            + "      if(menu.offsetParent===null)continue;" // 不可见的菜单跳过
+            + "      if(menu.querySelector('[data-siyuan-logout]'))continue;" // 已加过
+            + "      var item=document.createElement('div');"
+            + "      item.className='b3-menu__item';"
+            + "      item.setAttribute('data-siyuan-logout','1');"
+            + "      item.innerHTML='<svg class=\"b3-menu__icon\"><use xlink:href=\"#iconQuit\"></use></svg>'"
+            + "        +'<span class=\"b3-menu__label\">退出登录</span>';"
+            + "      item.addEventListener('click',function(ev){"
+            + "        ev.stopPropagation();"
+            + "        try{" + BRIDGE_NAME + ".logout();}catch(e){}"
+            + "      });"
+            + "      menu.appendChild(item);"
+            + "    }"
             + "  }catch(e){}"
             + "}"
-            // 监听 document 上的点击捕获：点了 #barMore 后延时添加菜单项
-            + "document.addEventListener('click',function(e){"
-            + "  var t=e.target;"
-            + "  if(t&&t.closest&&t.closest('#barMore')){"
-            + "    setTimeout(addItem,60);" // 等菜单构建完成后再追加
-            + "  }"
-            + "},true);"
+            // MutationObserver：菜单 DOM 变化后立即补项
+            + "try{"
+            + "  new MutationObserver(ensureItem).observe(document.body,"
+            + "    {childList:true,subtree:true,attributes:true});"
+            + "}catch(e){}"
+            // 定时轮询兜底（菜单重建会覆盖，定时确保始终存在）
+            + "setInterval(ensureItem,400);"
+            + "ensureItem();"
             + "})();";
 }
