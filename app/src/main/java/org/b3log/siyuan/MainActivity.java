@@ -633,9 +633,12 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
         // ===== SYNUIAN-CUSTOM-BEGIN (enable cache for remote server) =====
-        // 二开定制：连远程时允许缓存前端资源，避免每次启动都下载 5.7MB 的 JS 造成长时间黑屏。
-        // LOAD_DEFAULT 在有缓存时用缓存、无缓存时才走网络。本地模式官方原值是 LOAD_NO_CACHE。
-        ws.setCacheMode(RemoteConfig.ENABLED ? WebSettings.LOAD_DEFAULT : WebSettings.LOAD_NO_CACHE);
+        // 二开定制：连远程时强制优先用缓存，避免每次启动都从公网重新下载 6MB 的 main.js。
+        // 思源静态资源文件名带内容哈希（main.<hash>.js），内容变了文件名就变，
+        // 因此 LOAD_CACHE_ELSE_NETWORK 不会用到陈旧的前端代码，安全。
+        // 本地模式保持官方原值 LOAD_NO_CACHE。
+        ws.setCacheMode(RemoteConfig.ENABLED
+                ? WebSettings.LOAD_CACHE_ELSE_NETWORK : WebSettings.LOAD_NO_CACHE);
         // ===== SYNUIAN-CUSTOM-END =====
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         ws.setTextZoom(100);
