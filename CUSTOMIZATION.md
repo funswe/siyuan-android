@@ -46,6 +46,17 @@ git rebase upstream/main
 git push origin main
 ```
 
+## app.zip 精简（可选，减小 APK 体积）
+
+连远程时前端页面从服务器加载，APK 里的 app.zip 大部分是冗余的。已做精简版：
+
+- **删除**（走线上/纯展示，约 92MB 原始）：`stage/build/{desktop,mobile,app}/*`、`guide/*`、`appearance/covers/*`、`stage/ocr/*`
+- **保留**（原生工具函数依赖，约 64MB 原始）：`stage/build/markdown/*`、`stage/protyle/*`、`appearance/langs/*`、`appearance/fonts/*`、`stage/*` 根资源
+- APK 体积：**112MB → 78MB**
+- 完整版备份：项目根目录 `app.zip.full.bak`（不入库），出问题时 `cp app.zip.full.bak app/src/main/assets/app.zip` 恢复
+- 关键校验：`MarkdownRuntime.prepare()` 强制要求 `stage/build/markdown/index.html`、`stage/protyle/js/lute/lute.min.js`、`appearance/langs/en.json` 三个文件存在——都已保留。
+- **注意**：精简后首次启动 Markdown 编辑器、字体显示等功能需用真机验证；如有异常先恢复完整版 app.zip。
+
 ## 重新构建 APK
 
 构建产物（`kernel.aar`、`app.zip`、签名文件）不入库，升级版本后需要按版本重新生成：
