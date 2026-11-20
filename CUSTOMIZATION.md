@@ -135,6 +135,18 @@ adb shell run-as org.b3log.siyuan.debug rm -rf shared_prefs
 
 **关于登录方式**：自托管思源 Docker 版本身没有用户名/密码登录，只有「访问授权码」这一种鉴权。新版本支持 OIDC（对接 Google/Microsoft/GitHub 等第三方），但不是思源自带的账密。官方云端服务用 b3log 账号密码，与自托管不同。
 
+## 模拟器测试环境（本机）
+
+本机已配置 Android 模拟器用于自测（均在 D 盘）：
+- SDK：`D:\workspaces\family-control\third-party\android-sdk`（含 emulator、system-images/android-34/google_apis/x86_64）
+- AVD：`D:\AndroidAVD\siyuan_test.avd`（Pixel 7，x86_64，WHPX 加速）
+- 启动：`emulator -avd siyuan_test -accel on -gpu swiftshader`，等 `sys.boot_completed=1`
+
+**注意**：模拟器是 x86_64，而交付 APK 只含 arm64 内核（libgojni.so）。要在模拟器测试，需临时：
+1. `kernel.aar` 换成 x86_64+arm64 双架构版（gomobile `-target android/amd64,android/arm64`，备份在 `app/libs/kernel.aar.arm64.bak`）
+2. `flavors.gradle` 的 abiFilters 临时加 `'x86_64'`
+3. 测完恢复：拷回 arm64-only 的 kernel.aar + abiFilters 改回 `['arm64-v8a']` + clean 重编译
+
 ## 关于默认地址
 
 没有默认地址。`RemoteConfig` 只保留一个总开关 `ENABLED`，不含任何服务器地址或授权码。所有地址/凭据都来自用户在登录框的输入，保存在本机。
