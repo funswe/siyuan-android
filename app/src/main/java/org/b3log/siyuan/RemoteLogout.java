@@ -42,14 +42,18 @@ public final class RemoteLogout {
                 android.webkit.CookieManager.getInstance().removeAllCookies(null);
             } catch (final Exception ignored) {
             }
-            // 重启 App 回到登录框
-            final Intent intent = activity.getBaseContext().getPackageManager()
-                    .getLaunchIntentForPackage(activity.getPackageName());
-            if (null != intent) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                activity.startActivity(intent);
-            }
+            // 干净重启：先结束当前 Activity，再延迟拉起启动页，避免 finish 牵连新 Activity
             activity.finish();
+            activity.getWindow().getDecorView().postDelayed(() -> {
+                final Intent intent = activity.getBaseContext().getPackageManager()
+                        .getLaunchIntentForPackage(activity.getPackageName());
+                if (null != intent) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    activity.startActivity(intent);
+                }
+                // 结束旧进程，确保下次是全新启动
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }, 300);
         });
     }
 }
