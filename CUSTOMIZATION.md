@@ -46,6 +46,19 @@ git rebase upstream/main
 git push origin main
 ```
 
+## 启动黑屏优化（已实施，实测验证）
+
+CDP 实测定位（模拟器 + 真机）：黑屏不是网络/JS 问题（main.js 缓存后只要 0.44 秒），而是：
+1. 鉴权 + WebView 初始化期间（约 2-3 秒）屏幕是纯 `#1e1e1e` 黑背景
+2. **欢迎页 URL 错误**：原用 `/appearance/boot/index.html`，服务器端此路径返回 404，导致 bootWebView 加载失败、立即被移除，露出黑背景
+
+两项修复：
+- **修正 boot URL**：`RemoteSettings.bootPageUrl()` 改用 `/appearance/boot/?v=`（目录形式，服务器返回 200）。`isBootPage()` 已兼容此路径。
+- **原生启动画面**：`MainActivity.initUIElements()` 里在 onCreate 早期就显示 `bootLogo`+进度条（原来要等 initAppearance），鉴权期间就有思源 Logo，不再是黑屏。主页面 ready 后 onPageFinished 自动隐藏。
+- **去掉重复鉴权**：`RemoteKernel` 的登录回调原本 verify 一次、`connect()` 又 verify 一次（2 次 loginAuth），拆出 `finishConnect()` 让登录成功后只等待不重复校验。
+
+真机实测：1.5 秒时显示思源 Logo + "Booting kernel..." 进度条（原来是纯黑），随后正常进主界面，Logo 正确消失。
+
 ## app.zip 精简（可选，减小 APK 体积）
 
 连远程时前端页面从服务器加载，APK 里的 app.zip 大部分是冗余的。已做精简版：

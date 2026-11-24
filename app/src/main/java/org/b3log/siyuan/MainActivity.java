@@ -336,6 +336,19 @@ public class MainActivity extends AppCompatActivity implements com.blankj.utilco
         bootDetailsText = findViewById(R.id.bootDetails);
         webView = findViewById(R.id.webView);
 
+        // ===== SYNUIAN-CUSTOM-BEGIN (show splash immediately) =====
+        // 二开定制：连远程时，鉴权+WebView 初始化期间（约2-3秒）原本是纯黑背景。
+        // 这里在 onCreate 早期就显示 Logo 启动画面，避免黑屏；
+        // 主页面 ready 后 onPageFinished 会隐藏它（见 showBootIndex）。
+        if (RemoteConfig.ENABLED) {
+            bootLogo.setVisibility(View.VISIBLE);
+            bootProgressBar.setVisibility(View.VISIBLE);
+            bootProgressBar.setProgress(10);
+            bootDetailsText.setVisibility(View.VISIBLE);
+            bootDetailsText.setText("正在连接服务器...");
+        }
+        // ===== SYNUIAN-CUSTOM-END =====
+
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
             final String assetPath = AssetDownload.toAssetPath(url, siyuanMainPageUrl);
             if (null != assetPath) {

@@ -88,7 +88,10 @@ public final class RemoteSettings {
     }
 
     public static String bootPageUrl(final String version) {
-        return origin() + "/appearance/boot/index.html?v=" + version;
+        // 服务器端 /appearance/boot/index.html 返回 404，必须用目录形式 /appearance/boot/
+        // （思源内核对 boot 目录做了特殊路由）。用 index.html 会导致欢迎页加载失败、
+        // 触发 onReceivedError 立即移除 bootWebView，露出黑背景——这正是启动黑屏的根因。
+        return origin() + "/appearance/boot/?v=" + version;
     }
 
     public static String bootProgressUrl() {

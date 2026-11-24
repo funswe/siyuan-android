@@ -50,7 +50,7 @@ public final class RemoteKernel {
         final String savedCode = RemoteAuth.getAuthCode(activity);
 
         if (!savedCode.isEmpty()) {
-            // 本机已有授权码：用当前保存的地址直接校验并连接
+            // 本机已有授权码：用当前保存的地址校验并连接（校验在 connect 内完成）
             connect(activity, main, RemoteSettings.origin(), savedCode, onReady, true);
             return;
         }
@@ -60,6 +60,8 @@ public final class RemoteKernel {
             @Override
             public void onSubmit(final String origin, final String authCode, final Runnable dismiss) {
                 new Thread(() -> {
+                    // 只校验一次：这里校验成功后 cookie 已注入，直接 waitForServer，
+                    // 不再走 connect() 里的重复校验（原来会 loginAuth 两次）。
                     if (verify(origin, authCode)) {
                         RemoteSettings.saveOrigin(origin);
                         RemoteAuth.saveAuthCode(activity, authCode);
@@ -67,7 +69,7 @@ public final class RemoteKernel {
                             dismiss.run(); // 关闭登录框
                             Toast.makeText(activity, "登录成功", Toast.LENGTH_SHORT).show();
                         });
-                        connect(activity, main, origin, authCode, onReady, false);
+                        finishConnect(main, onReady);
                     } else {
                         main.post(() -> {
                             dismiss.run(); // 关闭旧框再弹新的，避免叠加
@@ -96,7 +98,7 @@ public final class RemoteKernel {
                         RemoteSettings.saveOrigin(origin);
                         RemoteAuth.saveAuthCode(activity, authCode);
                         main.post(dismiss); // 关闭登录框
-                        connect(activity, main, origin, authCode, onReady, false);
+                        finishConnect(main, onReady); // 已鉴权，不再重复校验
                     } else {
                         main.post(() -> {
                             dismiss.run(); // 关闭旧框再弹新的
@@ -131,7 +133,14 @@ public final class RemoteKernel {
                 }
                 return;
             }
-            waitForServer(origin);
+            finishConnect(main, onReady);
+        }, "RemoteBoot").start();
+    }
+
+    /** 已完成鉴权，只等待服务就绪并回调（登录流程用，避免重复 loginAuth） */
+    private static void finishConnect(final Handler main, final Runnable onReady) {
+        new Thread(() -> {
+            waitForServer(RemoteSettings.origin());
             main.post(onReady); // onReady 内部会刷新地址字段并加载页面
         }, "RemoteBoot").start();
     }
